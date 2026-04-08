@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pacific · Context Evaluator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Spectral:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #181818;
+    --border: #222222;
+    --border2: #2a2a2a;
+    --gold: #c9a84c;
+    --gold-dim: #8a6e2f;
+    --gold-glow: rgba(201,168,76,0.12);
+    --text: #e8e2d6;
+    --text-dim: #7a7468;
+    --text-mid: #a8a094;
+    --green: #4caf7a;
+    --red: #c94c4c;
+    --amber: #c9884c;
+    --radius: 2px;
+  }
+
+  html { font-size: 15px; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Spectral', Georgia, serif;
+    font-weight: 300;
+    min-height: 100vh;
+    line-height: 1.7;
+  }
+
+  /* Subtle noise texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  .logo {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2.4rem;
+    font-weight: 400;
+    line-height: 1.1;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--gold);
+  }
+
+  .header-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    text-align: right;
+    line-height: 1.8;
+  }
+
+  /* Section labels */
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold-dim);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Input panel */
+  .input-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .query-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+  }
+
+  input[type="text"], textarea {
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: 'Spectral', serif;
+    font-size: 0.95rem;
+    font-weight: 300;
+    padding: 0.75rem 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+    border-radius: var(--radius);
+  }
+
+  input[type="text"] { flex: 1; }
+
+  input[type="text"]:focus,
+  textarea:focus {
+    border-color: var(--gold-dim);
+    box-shadow: 0 0 0 3px var(--gold-glow);
+  }
+
+  input[type="text"]::placeholder,
+  textarea::placeholder {
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* Documents */
+  .docs-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .doc-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 1rem 1.25rem;
+    position: relative;
+  }
+
+  .doc-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .doc-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--gold);
+    background: var(--gold-glow);
+    border: 1px solid var(--gold-dim);
+    padding: 0.15rem 0.4rem;
+    letter-spacing: 0.1em;
+  }
+
+  .doc-name-input {
+    flex: 1;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.5rem;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .doc-name-input:focus {
+    border-color: var(--border2);
+    background: var(--surface2);
+  }
+
+  .doc-name-input::placeholder { font-style: normal; color: var(--text-dim); }
+
+  textarea.doc-content {
+    width: 100%;
+    height: 100px;
+    resize: vertical;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .remove-doc {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+    transition: color 0.2s;
+  }
+  .remove-doc:hover { color: var(--red); }
+
+  .add-doc-btn {
+    margin-top: 1rem;
+    background: none;
+    border: 1px dashed var(--border2);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    padding: 0.6rem 1.2rem;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    width: 100%;
+  }
+  .add-doc-btn:hover {
+    border-color: var(--gold-dim);
+    color: var(--gold);
+  }
+
+  /* Run button */
+  .run-btn {
+    background: var(--gold);
+    border: none;
+    color: #0a0a0a;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    padding: 0.75rem 2rem;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .run-btn:hover:not(:disabled) {
+    background: #e0bc62;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(201,168,76,0.3);
+  }
+  .run-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Loading */
+  .loading {
+    display: none;
+    text-align: center;
+    padding: 3rem 0;
+  }
+  .loading.active { display: block; }
+
+  .loading-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border2);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 1rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Results */
+  #results { display: none; }
+  #results.active { display: block; }
+
+  /* Summary card */
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+    padding: 1.75rem 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .summary-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    margin-bottom: 1.5rem;
+  }
+
+  .stat {
+    background: var(--surface);
+    padding: 1rem 1.25rem;
+    text-align: center;
+  }
+
+  .stat-val {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2rem;
+    color: var(--gold);
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+
+  .stat-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .summary-text {
+    font-size: 0.95rem;
+    color: var(--text-mid);
+    line-height: 1.8;
+    font-style: italic;
+  }
+
+  /* Eval cards */
+  .eval-list {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .eval-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: fadeUp 0.4s forwards;
+  }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .eval-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .eval-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .chunk-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  .source-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text-mid);
+    padding: 0.15rem 0.5rem;
+    letter-spacing: 0.05em;
+  }
+
+  .score-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .score-high { color: var(--green); border-color: var(--green); background: rgba(76,175,122,0.08); }
+  .score-mid  { color: var(--amber); border-color: var(--amber); background: rgba(201,136,76,0.08); }
+  .score-low  { color: var(--red);   border-color: var(--red);   background: rgba(201,76,76,0.08); }
+
+  .noise-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    padding: 0.15rem 0.5rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .noise-Low  { color: var(--green); background: rgba(76,175,122,0.08); }
+  .noise-Medium { color: var(--amber); background: rgba(201,136,76,0.08); }
+  .noise-High { color: var(--red); background: rgba(201,76,76,0.08); }
+
+  .chunk-preview {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    line-height: 1.6;
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .eval-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .eval-field { }
+
+  .field-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--gold-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+  }
+
+  .field-value {
+    font-size: 0.85rem;
+    color: var(--text-mid);
+    line-height: 1.6;
+  }
+
+  /* Score bar */
+  .score-bar-wrap {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .score-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .score-bar-track {
+    height: 2px;
+    background: var(--border2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .score-bar-fill {
+    height: 100%;
+    background: var(--gold);
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Error */
+  .error-box {
+    display: none;
+    background: rgba(201,76,76,0.06);
+    border: 1px solid rgba(201,76,76,0.3);
+    border-left: 3px solid var(--red);
+    padding: 1rem 1.25rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--red);
+    margin-bottom: 1.5rem;
+  }
+  .error-box.active { display: block; }
+
+  /* Footer */
+  footer {
+    padding: 2.5rem 0;
+    margin-top: 4rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  .footer-dot {
+    width: 4px;
+    height: 4px;
+    background: var(--gold);
+    border-radius: 50%;
+    display: inline-block;
+    margin: 0 0.5rem;
+    vertical-align: middle;
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .summary-stats { grid-template-columns: 1fr 1fr; }
+    .eval-fields { grid-template-columns: 1fr; }
+    .header-inner { flex-direction: column; align-items: flex-start; gap: 1rem; }
+    .query-row { flex-direction: column; }
+    h1 { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="header-inner">
+      <div>
+        <div class="logo">Pacific · Enterprise Context</div>
+        <h1>Context <em>Relevance</em><br>Evaluator</h1>
+      </div>
+      <div class="header-meta">
+        Retrieval Quality Analysis<br>
+        for Financial Intelligence<br>
+        <span style="color: var(--gold);">v1.0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Input -->
+  <div class="section-label">Query & Documents</div>
+
+  <div class="input-panel">
+    <div class="query-row">
+      <input type="text" id="queryInput"
+        placeholder="e.g. What was Q3 revenue growth compared to prior year?">
+      <button class="run-btn" id="runBtn" onclick="runEval()">Evaluate ↗</button>
+    </div>
+
+    <div class="section-label">Source Documents</div>
+
+    <div class="docs-grid" id="docsGrid">
+      <!-- Doc items inserted here -->
+    </div>
+
+    <button class="add-doc-btn" onclick="addDoc()">+ Add Document</button>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Retrieving &amp; evaluating context…</div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="section-label">Evaluation Report</div>
+
+    <div class="summary-card">
+      <div class="summary-stats">
+        <div class="stat">
+          <div class="stat-val" id="statAvg">—</div>
+          <div class="stat-label">Avg. Relevance</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="statUseful">—</div>
+          <div class="stat-label">Useful Chunks</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="statTotal">—</div>
+          <div class="stat-label">Retrieved</div>
+        </div>
+      </div>
+      <div class="summary-text" id="summaryText"></div>
+    </div>
+
+    <div class="section-label">Chunk Analysis</div>
+    <div class="eval-list" id="evalList"></div>
+  </div>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-text">
+        Pacific<span class="footer-dot"></span>Context Management System
+      </div>
+      <div class="footer-text">
+        Powered by Claude Sonnet
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script>
+  let docCount = 0;
+
+  function addDoc(name = "", content = "") {
+    docCount++;
+    const grid = document.getElementById('docsGrid');
+    const div = document.createElement('div');
+    div.className = 'doc-item';
+    div.dataset.id = docCount;
+    div.innerHTML = `
+      <div class="doc-header">
+        <span class="doc-num">DOC·${String(docCount).padStart(2,'0')}</span>
+        <input type="text" class="doc-name-input" placeholder="Document name…" value="${name}">
+        <button class="remove-doc" onclick="removeDoc(${docCount})">✕ remove</button>
+      </div>
+      <textarea class="doc-content" placeholder="Paste document content here — earnings reports, research notes, filings, internal memos…">${content}</textarea>
+    `;
+    grid.appendChild(div);
+  }
+
+  function removeDoc(id) {
+    const el = document.querySelector(`.doc-item[data-id="${id}"]`);
+    if (el) el.remove();
+  }
+
+  function getScoreClass(score) {
+    if (score >= 7) return 'score-high';
+    if (score >= 4) return 'score-mid';
+    return 'score-low';
+  }
+
+  async function runEval() {
+    const query = document.getElementById('queryInput').value.trim();
+    const docItems = document.querySelectorAll('.doc-item');
+    const errorBox = document.getElementById('errorBox');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+    const runBtn = document.getElementById('runBtn');
+
+    errorBox.classList.remove('active');
+    results.classList.remove('active');
+
+    if (!query) {
+      errorBox.textContent = 'Please enter a query before running evaluation.';
+      errorBox.classList.add('active');
+      return;
+    }
+
+    const documents = [];
+    docItems.forEach(item => {
+      const name = item.querySelector('.doc-name-input').value.trim() || 'Untitled';
+      const content = item.querySelector('.doc-content').value.trim();
+      if (content) documents.push({ name, content });
+    });
+
+    if (documents.length === 0) {
+      errorBox.textContent = 'Please add at least one document with content.';
+      errorBox.classList.add('active');
+      return;
+    }
+
+    runBtn.disabled = true;
+    loading.classList.add('active');
+
+    try {
+      const resp = await fetch('/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, documents })
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(data.error || 'Server error');
+      }
+
+      // Populate summary
+      document.getElementById('statAvg').textContent = data.average_relevance_score + '/10';
+      const useful = data.evaluations.filter(e => e.relevance_score >= 7).length;
+      document.getElementById('statUseful').textContent = useful + '/' + data.chunks_retrieved;
+      document.getElementById('statTotal').textContent = data.chunks_retrieved;
+      document.getElementById('summaryText').textContent = data.summary;
+
+      // Populate eval cards
+      const list = document.getElementById('evalList');
+      list.innerHTML = '';
+      data.evaluations.forEach((ev, i) => {
+        const card = document.createElement('div');
+        card.className = 'eval-card';
+        card.style.animationDelay = (i * 0.08) + 's';
+
+        const barPct = (ev.relevance_score / 10) * 100;
+
+        card.innerHTML = `
+          <div class="eval-header">
+            <div class="eval-meta">
+              <span class="chunk-label">Chunk ${ev.chunk_index}</span>
+              <span class="source-tag">${ev.source || 'Unknown'}</span>
+              <span class="noise-badge noise-${ev.noise_level}">${ev.noise_level} noise</span>
+            </div>
+            <span class="score-badge ${getScoreClass(ev.relevance_score)}">${ev.relevance_score}/10</span>
+          </div>
+          <div class="chunk-preview">${ev.chunk_preview}</div>
+          <div class="eval-fields">
+            <div class="eval-field">
+              <div class="field-label">Relevance</div>
+              <div class="field-value">${ev.relevance_reason}</div>
+            </div>
+            <div class="eval-field">
+              <div class="field-label">Answer Contribution</div>
+              <div class="field-value">${ev.answer_contribution}</div>
+            </div>
+            <div class="eval-field" style="grid-column: 1/-1;">
+              <div class="field-label">Noise Analysis</div>
+              <div class="field-value">${ev.noise_reason}</div>
+            </div>
+          </div>
+          <div class="score-bar-wrap">
+            <div class="score-bar-label">
+              <span>Relevance Score</span>
+              <span>${ev.relevance_score}/10</span>
+            </div>
+            <div class="score-bar-track">
+              <div class="score-bar-fill" style="width: 0%" data-pct="${barPct}"></div>
+            </div>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+
+      // Animate score bars after render
+      setTimeout(() => {
+        document.querySelectorAll('.score-bar-fill').forEach(bar => {
+          bar.style.width = bar.dataset.pct + '%';
+        });
+      }, 100);
+
+      results.classList.add('active');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (err) {
+      errorBox.textContent = 'Error: ' + err.message;
+      errorBox.classList.add('active');
+    } finally {
+      runBtn.disabled = false;
+      loading.classList.remove('active');
+    }
+  }
+
+  // Pre-load two example docs
+  addDoc("Q3 Earnings Report", `Total revenue for Q3 2024 reached $4.2 billion, representing an 18% increase year-over-year and a 6% sequential improvement. Net income grew to $890 million, up 22% from Q3 2023. Operating margins expanded by 150 basis points to 31.4%, driven by improved cost efficiency and favorable product mix. The company raised full-year guidance to $16.5B–$16.8B in revenue.`);
+  addDoc("Analyst Research Note", `Initiate coverage with Overweight rating and $145 price target. Management commentary on macro environment suggests cautious near-term outlook, though structural tailwinds remain intact. We model 15% revenue CAGR through 2026. Key risks include FX headwinds (~3% revenue impact) and competitive pressure in the enterprise segment. Q3 results broadly in-line with consensus; beat on margins.`);
+</script>
+</body>
+</html>
